@@ -57,11 +57,6 @@ unsigned long GetTickCount()
 #endif//WIN32
 
 
-std::mutex mutex_lock;
-std::vector<std::vector<NByte>> vectorDate;
-bool bExit = true;
-
-
 class CRaySubscriber : public CStClientSubscriber
 {
 private:
@@ -81,11 +76,13 @@ private:
     NByte			m_byteLevel;
     BNP_UINT16      m_u16NumberPrev;
     bool    m_bConsole;
+    std::vector<std::vector<NByte>>* m_vDataVectors;
+    std::mutex* m_mutex_lock;
 
     std::map<unsigned, unsigned> m_mapLevels;
 
 public:
-    CRaySubscriber( const boost::program_options::variables_map& vm )
+    CRaySubscriber( const boost::program_options::variables_map& vm, std::vector<std::vector<NByte>>& vDataVectors, std::mutex& mutex_lock)
         :     m_bMultiLine(false)
     , m_bIgnoreDub(false)
     , m_bLevelsMap(false)
@@ -102,6 +99,8 @@ public:
     , m_byteLevel(0)
     , m_u16NumberPrev(0)
     , m_bConsole(false)
+    , m_vDataVectors(&vDataVectors)
+    , m_mutex_lock(&mutex_lock)
 
     {
         m_bMultiLine = false;
@@ -131,7 +130,7 @@ public:
             m_bMultiLine = true;
             m_bShowRay = true;
         }
-        m_bConsole = IsArgValue(vm, c_szArgConsoleData);
+        m_bConsole = IsArgValue(vm, c_szArgTableCli);
     }
 
 
@@ -323,20 +322,6 @@ public:
         return bIgnore;
     }
 
-
-
-
-
-
-
-    void PrintRay2( std::stringstream& ss, const nita_net2::CbnpRay& ray)
-    {
-        BNP_UINT16 uNum = 0;
-        if( ray.uDataMask & RDM_Number )
-            uNum = ray.uNumber;
-        ss << " #" << std::setfill('0') << std::setw(4) << uNum;
-    }
-
     virtual NVoid OnPacket( NByte* lpData, NDword dwDataSize, CDataPacketBuffer& dpb )
     {
         static unsigned long lTimeObserv_ticks = GetTickCount();
@@ -421,11 +406,10 @@ public:
                 MapLevels(ray);
                 if(m_bConsole)
                 {
-                    mutex_lock.lock();
-                    vectorDate.at(ray.uNumber/2) = ray.vectorData;
-                    mutex_lock.unlock();
+                    m_mutex_lock->lock();
+                    m_vDataVectors->at(ray.uNumber/2) = ray.vectorData;
+                    m_mutex_lock->unlock();
 
-                    //Идет только изменение VV вектора, и запись порядкового номера номера.
                     bPrintForced = true;
                 }
                 else
@@ -471,7 +455,7 @@ public:
 static const int VSize = 2048;
 static const int HSize = 1024;
 
-bool PRINT(int X, int Y, int HQSize, int VQSize)//X,Y - Left Up square
+bool PRINT(int X, int Y, int HQSize, int VQSize, std::vector<std::vector<NByte>>& vDataVectors)//X,Y - Left Up square
 {
     for(int i = Y; i<(Y+VQSize); i++)
     {
@@ -488,7 +472,7 @@ bool PRINT(int X, int Y, int HQSize, int VQSize)//X,Y - Left Up square
         }
     for(int j = X; j<(X+HQSize); j++)
     {
-        printw(" 0%X", vectorDate.at(i).at(j));
+        printw(" 0%X", vDataVectors.at(i).at(j));
     }
     printw("\n");
 }
@@ -496,18 +480,19 @@ bool PRINT(int X, int Y, int HQSize, int VQSize)//X,Y - Left Up square
 return true;
 }
 
-void WindowMove(int x, int y)
+void WindowMove(int x, int y, std::vector<std::vector<NByte>>& vDataVectors, std::mutex& mutex_lock)
 {
+    bool bExit = false;
     struct winsize sz;
     ioctl(0, TIOCGWINSZ, &sz);
     int HSqSize = (sz.ws_col - 8)/3;
     int VSqSize = sz.ws_row;
 
-    while ( bExit )
+    while ( !bExit )
     {
         clear();
         mutex_lock.lock();
-        PRINT(x, y, HSqSize, VSqSize);
+        PRINT(x, y, HSqSize, VSqSize, vDataVectors);
         mutex_lock.unlock();
         refresh();
 
@@ -516,7 +501,7 @@ void WindowMove(int x, int y)
         switch ( ch )
         {
         case 10: //Enter
-        bExit = false;
+        bExit = true;
         break;
 
         case KEY_LEFT: //Влево
@@ -562,39 +547,11 @@ void WindowMove(int x, int y)
     }
 }
 
-void InitiVector()
-{
-    for(int i = 0; i<VSize; i++)
-    {
-        std::vector<NByte> vector;
-        vectorDate.push_back(vector);
-        for(int j = 0; j<HSize; j++)
-        {
-            vectorDate.at(i).push_back(0);
-        }
-    }
-}
-
 int main(int argc, char *argv[])
 {
     boost::program_options::variables_map vm;
     if( !CheckCommandLineArgs( argc, argv, vm ) )
         return 1;
-
-    int x = 0;
-    int y = 0;
-    if(IsArgValue(vm,c_szArgConsoleData))
-    {
-        initscr();
-        keypad(stdscr, true);
-        noecho();
-        nodelay(stdscr, true);
-        halfdelay(10);
-
-        InitiVector();
-        std::thread thread(WindowMove, std::ref(x) , std::ref(y));
-        thread.detach();
-    }
 
     std::string sSource = GetArgValue<std::string>( vm, c_szArgNSource);
 
@@ -609,7 +566,10 @@ int main(int argc, char *argv[])
 
     CStPlugMain		stPlugMain;
     CStPlugClient	stClient;
-    CRaySubscriber  stRaySubscriber(vm);
+
+    vector<vector<NByte>> vDataVectors(VSize, vector<NByte> (HSize, 0));//
+    std::mutex mutex_lock;
+    CRaySubscriber  stRaySubscriber(vm, vDataVectors, mutex_lock);
 
     //Plugin Load test
     std::cout << "INF> Load ip_st" << std::endl;
@@ -653,10 +613,25 @@ int main(int argc, char *argv[])
         }
 
         std::cout << "INF> Press <Enter> to exit" << std::endl;
-        while(bExit)
+
+        if(IsArgValue(vm,c_szArgTableCli))
         {
+            int iCoordX = 0;
+            int iCoordY = 0;
+            initscr();
+            keypad(stdscr, true);
+            noecho();
+            nodelay(stdscr, true);
+            halfdelay(10);
+
+            std::thread thread(WindowMove, std::ref(iCoordX) , std::ref(iCoordY), std::ref(vDataVectors), std::ref(mutex_lock));
+            thread.join();
+            endwin();
         }
-        endwin();
+        else
+        {
+            getch();
+        }
 
 
         if( stRaySubscriber.IsLevelsMap() )

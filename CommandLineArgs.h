@@ -21,7 +21,7 @@ const char c_szArgNFirst[] =	"first_ray";
 const char c_szArgNIgnoreDub[] ="ignore_dub";
 const char c_szArgNLevelsMap[] ="levels_map";
 const char c_szArgNModePlay[] = "mode_play";
-const char c_szArgConsoleData[] = "console";
+const char c_szArgTableCli[] = "table";
 
 // Values
 const char c_szArgVTime[] =		"time"; // show time marks
@@ -62,7 +62,7 @@ inline bool CheckCommandLineArgs(int ac, char* av[], boost::program_options::var
                 (c_szArgNIgnoreDub,                                     "ignore rays with dublicated index")
                 (c_szArgNLevelsMap,                                     "count values of levels")
                 (c_szArgNModePlay,                                      "set ip_st in play mode")
-                (c_szArgConsoleData,                                      "get data in console")
+                ("table,t",                                      "get table data in console")
                 ;
 
         po::parsed_options parsed = po::command_line_parser(ac, av).
