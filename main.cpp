@@ -51,7 +51,7 @@ using namespace ray_recv;
 unsigned long GetTickCount()
 {
     struct timeval tv;
-    gettimeofday(&tv,0);
+    gettimeofday(&tv, 0);
     return (tv.tv_sec*1000+tv.tv_usec/1000);
 }
 #endif//WIN32
@@ -459,23 +459,70 @@ bool PRINT(int X, int Y, int HQSize, int VQSize, std::vector<std::vector<NByte>>
 {
     for(int i = Y; i<(Y+VQSize); i++)
     {
-        if(i < 10)
-            printw("Ray%i:   ", i);
-        else
+        attron(COLOR_PAIR(1));
+        printw("Ray%4i: ", i);
+        if(vDataVectors.at(0).size() != 0)
         {
-            if(i < 100)
-                printw("Ray%i:  ", i);
-            else
+            for(int j = X; j<(X+HQSize); j++)
             {
-                printw("Ray%i: ", i);
+                switch ( vDataVectors.at(i).at(j) )
+                {
+                case 0:
+                attron(COLOR_PAIR(4));
+                break;
+
+                case 3:
+                attron(COLOR_PAIR(3));
+                break;
+
+                case 10:
+                attron(COLOR_PAIR(6));
+                break;
+
+                case 15:
+                attron(COLOR_PAIR(2));
+                break;
+
+                case 31:
+                attron(COLOR_PAIR(7));
+                break;
+
+                case 47:
+                attron(COLOR_PAIR(8));
+                break;
+                }
+
+                printw("%2.2X", vDataVectors.at(i).at(j));
             }
         }
-    for(int j = X; j<(X+HQSize); j++)
-    {
-        printw(" 0%X", vDataVectors.at(i).at(j));
+        printw("\n");
     }
-    printw("\n");
-}
+
+    attron(COLOR_PAIR(1));
+    int  column = X;
+    for(int j = 9; j<((2*HQSize)+10); j++)
+    {
+        move(VQSize, j);
+        if( (column%10) == 0 )
+        {
+            printw("|%4.4i", column);
+            j+=4;
+            column+=2;
+        }
+        else
+        {
+            if( (j%2) == 1)
+            {
+                printw(";");
+            }
+            else
+            {
+                printw(",");
+                column++;
+            }
+        }
+    }
+    move(0, 0);
 
 return true;
 }
@@ -483,10 +530,8 @@ return true;
 void WindowMove(int x, int y, std::vector<std::vector<NByte>>& vDataVectors, std::mutex& mutex_lock)
 {
     bool bExit = false;
-    struct winsize sz;
-    ioctl(0, TIOCGWINSZ, &sz);
-    int HSqSize = (sz.ws_col - 8)/3;
-    int VSqSize = sz.ws_row;
+    int HSqSize = (getmaxx(stdscr) - 10)/2;
+    int VSqSize = getmaxy(stdscr) - 1;
 
     while ( !bExit )
     {
@@ -567,7 +612,7 @@ int main(int argc, char *argv[])
     CStPlugMain		stPlugMain;
     CStPlugClient	stClient;
 
-    vector<vector<NByte>> vDataVectors(VSize, vector<NByte> (HSize, 0));//
+    vector<vector<NByte>> vDataVectors(VSize, vector<NByte> (0, 0));//
     std::mutex mutex_lock;
     CRaySubscriber  stRaySubscriber(vm, vDataVectors, mutex_lock);
 
@@ -614,7 +659,7 @@ int main(int argc, char *argv[])
 
         std::cout << "INF> Press <Enter> to exit" << std::endl;
 
-        if(IsArgValue(vm,c_szArgTableCli))
+        if(IsArgValue(vm, c_szArgTableCli))
         {
             int iCoordX = 0;
             int iCoordY = 0;
@@ -623,14 +668,24 @@ int main(int argc, char *argv[])
             noecho();
             nodelay(stdscr, true);
             halfdelay(10);
+            wtimeout(stdscr, -1000);
 
-            std::thread thread(WindowMove, std::ref(iCoordX) , std::ref(iCoordY), std::ref(vDataVectors), std::ref(mutex_lock));
+            start_color();
+            init_pair(1, COLOR_WHITE, COLOR_BLACK);
+            init_pair(2, COLOR_RED, COLOR_BLACK);
+            init_pair(3, COLOR_GREEN, COLOR_BLACK);
+            init_pair(4, COLOR_BLUE, COLOR_BLACK);
+            init_pair(5, COLOR_CYAN, COLOR_BLACK);
+            init_pair(6, COLOR_YELLOW, COLOR_BLACK);
+            init_pair(7, COLOR_MAGENTA, COLOR_BLACK);
+
+            std::thread thread(WindowMove, std::ref(iCoordX), std::ref(iCoordY), std::ref(vDataVectors), std::ref(mutex_lock));
             thread.join();
             endwin();
         }
         else
         {
-            getch();
+            getchar();
         }
 
 
