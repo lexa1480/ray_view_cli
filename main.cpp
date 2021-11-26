@@ -57,6 +57,44 @@ unsigned long GetTickCount()
 #endif//WIN32
 
 
+
+int SetColor(int iCell)
+{
+    int palette_idx = 0;
+    if( iCell <= int(255/2) )
+    {
+        int palette_first = 0x11;
+        int palette_last  = 0x34;
+        int palette_range = palette_last - palette_first;
+        palette_idx = int( palette_first + palette_range * iCell * 2 / 255 );
+    }
+    else
+    {
+        if( (iCell > int(255/2)) && (iCell <= 255) )
+        {
+            int palette_first = 0xe8;
+            int palette_last  = 0xc5;
+            int palette_range = palette_last - palette_first;
+            palette_idx = int( palette_first + palette_range * (iCell-255/2) * 2 / 255 );
+        }
+    }
+    return palette_idx;
+}
+
+void PrintPad(WINDOW* pad, int row, vector<NByte> vector)
+{
+    wmove(pad, row, 0);
+    for(int i = 0; i<(int)vector.size();i++)
+    {
+        wattron(pad, COLOR_PAIR(SetColor(vector.at(i))));
+        wprintw(pad, "%2.2X", vector.at(i));
+    }
+
+    wprintw(pad, "\n");
+}
+
+
+
 class CRaySubscriber : public CStClientSubscriber
 {
 private:
@@ -76,13 +114,12 @@ private:
     NByte			m_byteLevel;
     BNP_UINT16      m_u16NumberPrev;
     bool    m_bConsole;
-    std::vector<std::vector<NByte>>* m_vDataVectors;
+    WINDOW* m_pad;
     std::mutex* m_mutex_lock;
-
     std::map<unsigned, unsigned> m_mapLevels;
 
 public:
-    CRaySubscriber( const boost::program_options::variables_map& vm, std::vector<std::vector<NByte>>& vDataVectors, std::mutex& mutex_lock)
+    CRaySubscriber( const boost::program_options::variables_map& vm, WINDOW* pad, std::mutex& mutex_lock)
         :     m_bMultiLine(false)
     , m_bIgnoreDub(false)
     , m_bLevelsMap(false)
@@ -99,7 +136,7 @@ public:
     , m_byteLevel(0)
     , m_u16NumberPrev(0)
     , m_bConsole(false)
-    , m_vDataVectors(&vDataVectors)
+    , m_pad(pad)
     , m_mutex_lock(&mutex_lock)
 
     {
@@ -407,7 +444,7 @@ public:
                 if(m_bConsole)
                 {
                     m_mutex_lock->lock();
-                    m_vDataVectors->at(ray.uNumber/2) = ray.vectorData;
+                    PrintPad(m_pad, ray.uNumber/2, ray.vectorData);
                     m_mutex_lock->unlock();
 
                     bPrintForced = true;
@@ -455,91 +492,46 @@ public:
 static const int VSize = 2048;
 static const int HSize = 1024;
 
-bool PRINT(int X, int Y, int HQSize, int VQSize, std::vector<std::vector<NByte>>& vDataVectors)//X,Y - Left Up square
+bool SetPadHorizontal(WINDOW* padHorizontal)
 {
-    for(int i = Y; i<(Y+VQSize); i++)
+    wprintw(padHorizontal, "         ");
+    for(int j = 0; j<HSize; j+=10)
     {
-        attron(COLOR_PAIR(1));
-        printw("Ray%4i: ", i);
-        if(vDataVectors.at(0).size() != 0)
-        {
-            for(int j = X; j<(X+HQSize); j++)
-            {
-                switch ( vDataVectors.at(i).at(j) )
-                {
-                case 0:
-                attron(COLOR_PAIR(4));
-                break;
-
-                case 3:
-                attron(COLOR_PAIR(3));
-                break;
-
-                case 10:
-                attron(COLOR_PAIR(6));
-                break;
-
-                case 15:
-                attron(COLOR_PAIR(2));
-                break;
-
-                case 31:
-                attron(COLOR_PAIR(7));
-                break;
-
-                case 47:
-                attron(COLOR_PAIR(8));
-                break;
-                }
-
-                printw("%2.2X", vDataVectors.at(i).at(j));
-            }
-        }
-        printw("\n");
+        wprintw(padHorizontal, "|%4.4i,;,;,;,;,;,;,;,", j);
     }
 
-    attron(COLOR_PAIR(1));
-    int  column = X;
-    for(int j = 9; j<((2*HQSize)+10); j++)
-    {
-        move(VQSize, j);
-        if( (column%10) == 0 )
-        {
-            printw("|%4.4i", column);
-            j+=4;
-            column+=2;
-        }
-        else
-        {
-            if( (j%2) == 1)
-            {
-                printw(";");
-            }
-            else
-            {
-                printw(",");
-                column++;
-            }
-        }
-    }
-    move(0, 0);
 
-return true;
+    return true;
 }
 
-void WindowMove(int x, int y, std::vector<std::vector<NByte>>& vDataVectors, std::mutex& mutex_lock)
+bool SetPadVertical(WINDOW* padVertical)
+{
+    for(int i = 0; i<VSize; i++)
+    {
+        wmove(padVertical, i, 0);
+        wprintw(padVertical, "Ray%4i:", i);
+    }
+
+    return true;
+}
+
+void WindowMove(WINDOW* pad, std::mutex& mutex_lock, WINDOW* padHorizontal, WINDOW* padVertical)
 {
     bool bExit = false;
-    int HSqSize = (getmaxx(stdscr) - 10)/2;
-    int VSqSize = getmaxy(stdscr) - 1;
+    int x = 0;
+    int y = 0;
+    int HSqSize = getmaxx(stdscr);
+    int VSqSize = getmaxy(stdscr);
+    SetPadHorizontal(padHorizontal);
+    SetPadVertical(padVertical);
 
     while ( !bExit )
     {
-        clear();
+        prefresh(padHorizontal, 0, x, VSqSize - 1, 0, VSqSize, HSqSize - 1);
+        prefresh(padVertical, y, 0, 0, 0, VSqSize - 2, 9);
         mutex_lock.lock();
-        PRINT(x, y, HSqSize, VSqSize, vDataVectors);
+        prefresh(pad, y, x, 0, 9, VSqSize - 2, HSqSize - 1);
         mutex_lock.unlock();
-        refresh();
 
         int ch = getch();
 
@@ -551,7 +543,7 @@ void WindowMove(int x, int y, std::vector<std::vector<NByte>>& vDataVectors, std
 
         case KEY_LEFT: //Влево
         if(x>0)
-            x--;
+            x-=2;
         break;
 
         case KEY_UP: //Вверх
@@ -560,12 +552,12 @@ void WindowMove(int x, int y, std::vector<std::vector<NByte>>& vDataVectors, std
         break;
 
         case KEY_RIGHT: //Вправо
-        if(x<(HSize - HSqSize))
-            x++;
+        if(x<((2*HSize+9) - HSqSize))
+            x+=2;
         break;
 
         case KEY_DOWN: //Вниз
-        if(y<(VSize - VSqSize))
+        if(y<((VSize+1) - VSqSize))
             y++;
         break;
 
@@ -580,14 +572,47 @@ void WindowMove(int x, int y, std::vector<std::vector<NByte>>& vDataVectors, std
         break;
 
         case 562: //Вправо + Ctrl
-        if(x<=(HSize - (2*HSqSize)))
+        if(x<=((2*HSize+10) - (2*HSqSize)))
             x = x + HSqSize;
         break;
 
         case 527: //Вниз + Ctrl
-        if(y<=(VSize - (2*VSqSize)))
+        if(y<=((VSize+1) - (2*VSqSize)))
             y = y + VSqSize;
         break;
+
+
+
+        case KEY_HOME: //Начало
+        x = 0;
+        y = 0;
+        break;
+
+        case KEY_END: //Конец
+        x = (2*HSize+9) - HSqSize;
+        y = (VSize+1) - VSqSize;
+        break;
+
+
+
+        case KEY_RESIZE: //Изменение размера окна
+        int Hor = getmaxx(stdscr);
+        int Ver = getmaxy(stdscr);
+        if(x > ((2*HSize+9) - Hor))
+        {
+            x = ((2*HSize+9) - Hor);
+        }
+        if(y>((VSize+1) - Ver))
+        {
+            y = ((VSize+1) - Ver);
+        }
+
+        HSqSize = Hor;
+        VSqSize = Ver;
+        redrawwin(stdscr);
+        refresh();
+        break;
+
         }
     }
 }
@@ -612,9 +637,25 @@ int main(int argc, char *argv[])
     CStPlugMain		stPlugMain;
     CStPlugClient	stClient;
 
-    vector<vector<NByte>> vDataVectors(VSize, vector<NByte> (0, 0));//
+    WINDOW* pad = NULL;
     std::mutex mutex_lock;
-    CRaySubscriber  stRaySubscriber(vm, vDataVectors, mutex_lock);
+    if(IsArgValue(vm, c_szArgTableCli))
+    {
+        initscr();
+        keypad(stdscr, true);
+        noecho();
+        halfdelay(10);
+        start_color();
+        for(int i = 0; i < COLORS; i++)
+        {
+            init_pair(i + 1, i, 0);
+        }
+        init_pair(1, COLOR_WHITE, COLOR_BLUE);
+        bkgdset( COLOR_PAIR(1) );
+
+        pad = newpad(VSize + 1, 2*HSize + 10);
+    }
+    CRaySubscriber  stRaySubscriber(vm, pad, mutex_lock);
 
     //Plugin Load test
     std::cout << "INF> Load ip_st" << std::endl;
@@ -661,25 +702,11 @@ int main(int argc, char *argv[])
 
         if(IsArgValue(vm, c_szArgTableCli))
         {
-            int iCoordX = 0;
-            int iCoordY = 0;
-            initscr();
-            keypad(stdscr, true);
-            noecho();
-            nodelay(stdscr, true);
-            halfdelay(10);
-            wtimeout(stdscr, -1000);
+            clear();
+            WINDOW* padHorizontal = newpad(1, 2*HSize + 10);
+            WINDOW* padVertical = newpad(VSize, 9);
 
-            start_color();
-            init_pair(1, COLOR_WHITE, COLOR_BLACK);
-            init_pair(2, COLOR_RED, COLOR_BLACK);
-            init_pair(3, COLOR_GREEN, COLOR_BLACK);
-            init_pair(4, COLOR_BLUE, COLOR_BLACK);
-            init_pair(5, COLOR_CYAN, COLOR_BLACK);
-            init_pair(6, COLOR_YELLOW, COLOR_BLACK);
-            init_pair(7, COLOR_MAGENTA, COLOR_BLACK);
-
-            std::thread thread(WindowMove, std::ref(iCoordX), std::ref(iCoordY), std::ref(vDataVectors), std::ref(mutex_lock));
+            std::thread thread(WindowMove, std::ref(pad), std::ref(mutex_lock), std::ref(padHorizontal), std::ref(padVertical));
             thread.join();
             endwin();
         }
