@@ -26,12 +26,6 @@
 #include <ModeInfo.h>
 plug_key::CModeInfoPlug g_ModeInfoPlug;
 
-std::string GetTimeString_ms()
-{
-    std::string sTimeIso = boost::posix_time::to_iso_string(boost::posix_time::microsec_clock::universal_time());
-    return sTimeIso;
-}
-
 
 //
 using namespace std;
@@ -98,14 +92,6 @@ void PrintPad(WINDOW* pad, int row, vector<NByte> vector)
 class CRaySubscriber : public CStClientSubscriber
 {
 private:
-    bool            m_bMultiLine;
-    bool            m_bIgnoreDub;
-    bool            m_bLevelsMap;
-    bool            m_bShowTime;
-    bool            m_bShowStat;
-    bool            m_bShowRay;
-    bool			m_bShowData;
-    bool			m_bShowIdx;
     size_t			m_iRadiusZero;
     size_t			m_iRadiusDistance;
     int				m_iNum;
@@ -113,133 +99,32 @@ private:
     unsigned int	m_uMask;
     NByte			m_byteLevel;
     BNP_UINT16      m_u16NumberPrev;
-    bool    m_bConsole;
     WINDOW* m_pad;
     std::mutex* m_mutex_lock;
-    std::map<unsigned, unsigned> m_mapLevels;
 
 public:
     CRaySubscriber( const boost::program_options::variables_map& vm, WINDOW* pad, std::mutex& mutex_lock)
-        :     m_bMultiLine(false)
-    , m_bIgnoreDub(false)
-    , m_bLevelsMap(false)
-    , m_bShowTime(true)
-    , m_bShowStat(true)
-    , m_bShowRay(false)
-    , m_bShowData(false)
-    , m_bShowIdx(false)
-    , m_iRadiusZero(0)
+        :     m_iRadiusZero(0)
     , m_iRadiusDistance(0)
     , m_iNum(0)
     , m_iFirstRayIdx(0)
     , m_uMask(0)
     , m_byteLevel(0)
     , m_u16NumberPrev(0)
-    , m_bConsole(false)
     , m_pad(pad)
     , m_mutex_lock(&mutex_lock)
 
     {
-        m_bMultiLine = false;
-        m_bIgnoreDub = IsArgValue( vm, c_szArgNIgnoreDub );
-        m_bLevelsMap = IsArgValue( vm, c_szArgNLevelsMap );
         int iLevel = GetArgValue<int>( vm, c_szArgNLevel );
         m_byteLevel = static_cast<NByte>(iLevel);
-        m_iRadiusZero =         GetArgValueDefault<size_t>( vm, c_szArgNRadius0, 0 );
+        m_iRadiusZero =         GetArgValueDefault<size_t>( vm, c_szArgNRadius0, 0 );z
         m_iRadiusDistance =         GetArgValueDefault<size_t>( vm, c_szArgNRadius, 0 );
         m_iNum =        GetArgValueDefault<int>( vm, c_szArgNNum, c_iRaysNum );
         m_iFirstRayIdx =	GetArgValueDefault<int>( vm, c_szArgNFirst, c_iRayIdxNegative );
         m_uMask =       GetArgValueDefault<unsigned int>( vm, c_szArgNMask, 0 ); // zero = no mask
-
-        std::vector<std::string> vDisplay;
-        GetArgValue< std::vector<std::string> >( vm, c_szArgNDisplay, vDisplay );
-        if( !vDisplay.empty() )
-        {
-            m_bShowTime =   FindArg( vDisplay, c_szArgVTime );
-            m_bShowStat =   FindArg( vDisplay, c_szArgVStat );
-            m_bShowRay =    FindArg( vDisplay, c_szArgVRay );
-            m_bShowData =   FindArg( vDisplay, c_szArgVData );
-            m_bShowIdx =	FindArg( vDisplay, c_szArgVIdx );
-        }
-
-        if( m_bShowData )
-        {
-            m_bMultiLine = true;
-            m_bShowRay = true;
-        }
-        m_bConsole = IsArgValue(vm, c_szArgTableCli);
     }
 
-
-    bool IsMultiLineShow() const {return m_bMultiLine;}
-    bool IsLevelsMap() const {return m_bLevelsMap;}
-
-    std::string GetTimeString( time_t ltime = 0, const char* pFormat = "%Y-%m-%d_%H:%M:%S" )
-    {
-        if( 0 == ltime )
-            time( &ltime );
-        struct tm *ptmToday = gmtime( &ltime );
-        char szTime[128] = "";
-        strftime( szTime, sizeof( szTime ), pFormat, ptmToday );
-        return std::string( szTime );
-    }
-    void PrintLevelsMap(std::ostream& ss )
-    {
-        ss << "LEVEL<>COUNT---------------------" << std::endl;
-        std::map<unsigned, unsigned>::iterator it;
-        for(it = m_mapLevels.begin(); it != m_mapLevels.end(); ++it)
-        {
-            ss << std::setw(3) << it->first << ", " << std::setw(6) << it->second << std::endl;
-        }
-    }
-    void PrintTime(std::stringstream& ss)
-    {
-        if( m_bShowTime )
-            ss  << GetTimeString_ms() << ">";
-    }
-    void PrintHeader(std::stringstream& ss, CDataPacketBuffer& dpb )
-    {
-        ss  << "["  << dpb.GetBaseHeader()->GetComputerName()
-            << "#"  << std::setfill('0') << std::setw(5) << dpb.GetBaseHeader()->m_wPacketNum
-            << "]";
-    }
-    void PrintRay( std::stringstream& ss, const nita_net2::CbnpRay& ray, size_t& szSize, BNP_FLOAT32& fMeterScale )
-    {
-        BNP_UINT16 uNum = 0;
-        if( ray.uDataMask & RDM_Number )
-            uNum = ray.uNumber;
-        ss << " #" << std::setfill('0') << std::setw(4) << uNum;
-        bool bReverseRay = IsRayIgnoredByReverse(m_u16NumberPrev, ray.uNumber, 4096, 100);
-        if( m_u16NumberPrev == ray.uNumber )
-            ss << "*";
-        if( bReverseRay )
-            ss << "-";
-        else
-            ss << " ";
-        szSize = 0;
-        if( ray.uDataMask & RDM_RayData )
-            szSize = ray.vectorData.size();
-        ss << " size:" << std::setfill('0') << std::setw(5) << szSize << ";";
-        fMeterScale = 0;
-        if( ray.uDataMask & RDM_MeterScale )
-            fMeterScale = ray.fMeterScale;
-        ss << " scale:" << std::fixed << std::setprecision(1) << fMeterScale << ";";
-        BNP_UINT16 u16BitDepth = 0;
-        if( ray.uDataMask & RDM_Property )
-        {
-            BNP_UINT16 u16BitDepthProperty = ( ray.uProperty & Property_Resolution_Enum );
-            if( u16BitDepthProperty )
-            {
-                if(u16BitDepthProperty & Property_Resolution_4bit)
-                       u16BitDepth = 4;
-                if(u16BitDepthProperty & Property_Resolution_8bit)
-                       u16BitDepth = 8;
-            }
-        }
-        ss << " depth:" << u16BitDepth << ";";
-    }
-
-        void OnRayIdx( int iRayNum )
+    void OnRayIdx( int iRayNum )
     {
         if( m_iFirstRayIdx == iRayNum )
         {
@@ -254,72 +139,11 @@ public:
     }
     void OnMissedRayCount( std::stringstream& ss, int iRayNum, unsigned uCount )
     {
-        if( IsMultiLineShow() )
-        {
-            if( m_bShowRay && !m_bConsole)
-                ss << " #" << std::setfill('0') << std::setw(4) << iRayNum << " - missed: " << uCount << std::endl;
-        }
+               // ss << " #" << std::setfill('0') << std::setw(4) << iRayNum << " - missed: " << uCount << std::endl;
     }
     void OnMissedRay( std::stringstream& ss, int iRayNum )
     {
-        if( IsMultiLineShow() )
-        {
-            if( m_bShowRay && !m_bConsole)
-                ss << " #" << std::setfill('0') << std::setw(4) << iRayNum << " - missed;" << std::endl;
-        }
-    }
-    void MapLevels( const nita_net2::CbnpRay& ray )
-    {
-        for(size_t i=0; i<ray.vectorData.size(); i++)
-        {
-            unsigned uDot = ray.vectorData[i];
-            if( m_mapLevels.find(uDot) != m_mapLevels.end() )
-                m_mapLevels[uDot] += 1;
-            else
-                m_mapLevels[uDot] = 1;
-        }
-    }
-    bool PrintLevels( std::stringstream& ss, const nita_net2::CbnpRay& ray )
-    {
-        bool bRes = false;
-        if( IsMultiLineShow() )
-        {
-            for(size_t i=0; i<ray.vectorData.size(); i++)
-            {
-                if( i < m_iRadiusZero )
-                    continue;
-                if( ( m_iRadiusDistance > 0 ) && ( ( i - m_iRadiusZero ) > m_iRadiusDistance ) )
-                    break;
-                NByte byteDot = ray.vectorData[i];
-                if( m_uMask )
-                    byteDot = ( byteDot & m_uMask );
-                bRes = true;
-                ss << ' ';
-                if( m_bShowIdx )
-                    ss << std::dec << i << ':';
-                if( m_bShowData )
-                {
-                    if( byteDot >= m_byteLevel )
-                        ss << std::hex << std::setfill('0') << std::setw(2) << (unsigned)byteDot;
-                    else
-                        ss << "--";
-                }
-            }
-        }
-        return bRes;
-    }
-
-    void Print( std::stringstream& ss, unsigned long& lTimePrev_ticks, bool bPrintForced )
-    {
-        unsigned long lTimeCur_ticks = GetTickCount();
-        unsigned long lTimeout_ms = lTimeCur_ticks - lTimePrev_ticks;
-        if( bPrintForced || (lTimeout_ms > 200) )
-        {
-            lTimePrev_ticks = lTimeCur_ticks;
-            if( m_bShowRay && !IsMultiLineShow() )
-                ss << '\r';
-            std::cout << ss.str() << std::flush;
-        }
+                //ss << " #" << std::setfill('0') << std::setw(4) << iRayNum << " - missed;" << std::endl;
     }
 
     unsigned GetLostCount( CDataPacketBuffer& dpb, NWord& wPacketNum )
@@ -341,35 +165,13 @@ public:
         return uLost;
     }
 
-    bool IsRayIgnoredByReverse( int iPrev_num, int iNext_num, int iTurn_num, int iIgnore_num )
-    {
-        bool bIgnore = false;
-        if( iNext_num == iPrev_num )
-            bIgnore = true;
-        else
-        {
-            int iBackIdx = iPrev_num - iIgnore_num;
-            if( iBackIdx < 0 )
-                iBackIdx += iTurn_num;
-            if( iBackIdx < iPrev_num )
-                bIgnore = ( iBackIdx <= iNext_num && iNext_num <= iPrev_num );
-            else
-                bIgnore = ( iBackIdx <= iNext_num || iNext_num <= iPrev_num );
-        }
-        return bIgnore;
-    }
-
     virtual NVoid OnPacket( NByte* lpData, NDword dwDataSize, CDataPacketBuffer& dpb )
     {
-        static unsigned long lTimeObserv_ticks = GetTickCount();
         static unsigned uRays = 0;
         static unsigned uPackets = 0;
         static unsigned uErrorsCount = 0;
-        static unsigned long lTimeRay_ticks = GetTickCount();
         static NWord	wPacketNum = 0;
         static unsigned uLostTotal = 0;
-        static size_t szSize = 0;
-        static BNP_FLOAT32 fMeterScale = 0;
         static BNP_UINT16	u16RayNumDiff = 0;
 
         bool bIgrnoreRay = false;
@@ -392,25 +194,6 @@ public:
 
             if( m_u16NumberPrev > ray.uNumber )
             {
-                CPacketBaseHeader* pHeader = dpb.GetBaseHeader();
-                long lTimeCur_ticks = GetTickCount();
-                long lDeltaTime_ms = lTimeCur_ticks - lTimeObserv_ticks;
-                lTimeObserv_ticks = lTimeCur_ticks;
-                if( m_bShowStat )
-                {
-                    PrintTime(ss);
-                    ss      << "Turn> "     << pHeader->m_szComputerName
-                            << "; "         << std::setfill(' ') << std::setw(4) << lDeltaTime_ms << " ms"
-                            << "; rays:"    << std::setfill(' ') << std::setw(4) << uRays
-                            << "; num_diff:" << u16RayNumDiff
-                            << "; size:"    << std::setfill('0') << std::setw(4) << szSize
-                            << "; scale:"   << fMeterScale
-                            << "; packet:"  << std::setw(5) << std::setfill('0') << (int)wPacketNum
-                            << "; lost:"    << uLostTotal
-                            << "; errors:"  << uErrorsCount
-                            << "; reverse: " << m_u16NumberPrev << " - " << ray.uNumber << ""
-                            << std::endl;
-                }
                 uRays = 0;
                 uLostTotal = 0;
                 u16RayNumDiff = 0;
@@ -420,7 +203,7 @@ public:
             int iPrev = ( m_u16NumberPrev > ray.uNumber ) ? (m_u16NumberPrev-4096) : m_u16NumberPrev;
             BNP_UINT16 u16NumDiff = BNP_UINT16(ray.uNumber - iPrev);
 
-            if( m_bIgnoreDub && ( 0 == u16NumDiff) )
+            if(  0 == u16NumDiff )
                 bIgrnoreRay = true;
 
             if( u16RayNumDiff < u16NumDiff )
@@ -440,29 +223,12 @@ public:
             if( !bIgrnoreRay )
             {
                 OnRayIdx(ray.uNumber);
-                MapLevels(ray);
-                if(m_bConsole)
-                {
-                    m_mutex_lock->lock();
-                    PrintPad(m_pad, ray.uNumber/2, ray.vectorData);
-                    m_mutex_lock->unlock();
 
-                    bPrintForced = true;
-                }
-                else
-                {
-                    if( m_bShowRay )
-                    {
-                        PrintTime(ss);
-                        PrintHeader(ss, dpb );
-                        PrintRay(ss, ray, szSize, fMeterScale );
-                        if( PrintLevels( ss, ray ) )
-                        {
-                            ss << std::endl;
-                            bPrintForced = true;
-                        }
-                    }
-                }
+                m_mutex_lock->lock();
+                PrintPad(m_pad, ray.uNumber/2, ray.vectorData);
+                m_mutex_lock->unlock();
+
+                bPrintForced = true;
             }
             m_u16NumberPrev = ray.uNumber;
         }
@@ -470,22 +236,9 @@ public:
         {
             ss << "Cat#" << (int)bnp.m_uCategory << "> " << uPackets << "; size:" << dwDataSize << "; lost:" << uLostTotal;
             ss << "; ERROR - wrong category!";
+            std::cout << ss.str() << std::flush;
             uErrorsCount++;
         }
-
-        bool bPrintEnabled = true;
-
-        if( m_iNum == 0 )
-        {
-            bPrintEnabled = false;
-        }
-        else if( m_iFirstRayIdx != c_iRayIdxNegative )
-        {
-            bPrintEnabled = false;
-        }
-
-        if( bPrintEnabled )
-            Print( ss, lTimeRay_ticks, bPrintForced );
     }
 };
 
@@ -506,6 +259,7 @@ bool SetPadHorizontal(WINDOW* padHorizontal)
 
 bool SetPadVertical(WINDOW* padVertical)
 {
+    werase(padVertical);
     for(int i = 0; i<VSize; i++)
     {
         wmove(padVertical, i, 0);
@@ -522,16 +276,18 @@ void WindowMove(WINDOW* pad, std::mutex& mutex_lock, WINDOW* padHorizontal, WIND
     int y = 0;
     int HSqSize = getmaxx(stdscr);
     int VSqSize = getmaxy(stdscr);
+    mutex_lock.lock();
     SetPadHorizontal(padHorizontal);
     SetPadVertical(padVertical);
+    mutex_lock.unlock();
 
     while ( !bExit )
     {
-        prefresh(padHorizontal, 0, x, VSqSize - 1, 0, VSqSize, HSqSize - 1);
-        prefresh(padVertical, y, 0, 0, 0, VSqSize - 2, 9);
         mutex_lock.lock();
         prefresh(pad, y, x, 0, 9, VSqSize - 2, HSqSize - 1);
         mutex_lock.unlock();
+        prefresh(padHorizontal, 0, x, VSqSize - 1, 0, VSqSize, HSqSize - 1);
+        prefresh(padVertical, y, 0, 0, 0, VSqSize - 2, 9);
 
         int ch = getch();
 
@@ -637,24 +393,20 @@ int main(int argc, char *argv[])
     CStPlugMain		stPlugMain;
     CStPlugClient	stClient;
 
-    WINDOW* pad = NULL;
-    std::mutex mutex_lock;
-    if(IsArgValue(vm, c_szArgTableCli))
+    initscr();
+    keypad(stdscr, true);
+    noecho();
+    halfdelay(10);
+    start_color();
+    for(int i = 0; i < COLORS; i++)
     {
-        initscr();
-        keypad(stdscr, true);
-        noecho();
-        halfdelay(10);
-        start_color();
-        for(int i = 0; i < COLORS; i++)
-        {
-            init_pair(i + 1, i, 0);
-        }
-        init_pair(1, COLOR_WHITE, COLOR_BLUE);
-        bkgdset( COLOR_PAIR(1) );
-
-        pad = newpad(VSize + 1, 2*HSize + 10);
+        init_pair(i + 1, i, 0);
     }
+    init_pair(1, COLOR_WHITE, COLOR_BLUE);
+    bkgdset( COLOR_PAIR(1) );
+    WINDOW* pad = newpad(VSize + 1, 2*HSize + 10);
+    std::mutex mutex_lock;
+
     CRaySubscriber  stRaySubscriber(vm, pad, mutex_lock);
 
     //Plugin Load test
@@ -700,32 +452,14 @@ int main(int argc, char *argv[])
 
         std::cout << "INF> Press <Enter> to exit" << std::endl;
 
-        if(IsArgValue(vm, c_szArgTableCli))
-        {
-            clear();
-            WINDOW* padHorizontal = newpad(1, 2*HSize + 10);
-            WINDOW* padVertical = newpad(VSize, 9);
+        clear();
+        WINDOW* padHorizontal = newpad(1, 2*HSize + 10);
+        WINDOW* padVertical = newpad(VSize, 9);
 
-            std::thread thread(WindowMove, std::ref(pad), std::ref(mutex_lock), std::ref(padHorizontal), std::ref(padVertical));
-            thread.join();
-            endwin();
-        }
-        else
-        {
-            getchar();
-        }
+        std::thread thread(WindowMove, std::ref(pad), std::ref(mutex_lock), std::ref(padHorizontal), std::ref(padVertical));
+        thread.join();
+        endwin();
 
-
-        if( stRaySubscriber.IsLevelsMap() )
-        {
-            std::string sFilePath = "./levels.csv";
-            std::ofstream file( sFilePath.c_str() );
-            if( !file )
-            {
-                std::cerr << "ERR> Can't open file " << sFilePath << std::endl;
-            }
-            stRaySubscriber.PrintLevelsMap( file );
-        }
         //close client
         stClient.UnSubscribe();
         stClient.CloseStClient();
