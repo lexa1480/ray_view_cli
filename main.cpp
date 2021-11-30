@@ -117,7 +117,7 @@ public:
     {
         int iLevel = GetArgValue<int>( vm, c_szArgNLevel );
         m_byteLevel = static_cast<NByte>(iLevel);
-        m_iRadiusZero =         GetArgValueDefault<size_t>( vm, c_szArgNRadius0, 0 );z
+        m_iRadiusZero =         GetArgValueDefault<size_t>( vm, c_szArgNRadius0, 0 );
         m_iRadiusDistance =         GetArgValueDefault<size_t>( vm, c_szArgNRadius, 0 );
         m_iNum =        GetArgValueDefault<int>( vm, c_szArgNNum, c_iRaysNum );
         m_iFirstRayIdx =	GetArgValueDefault<int>( vm, c_szArgNFirst, c_iRayIdxNegative );
