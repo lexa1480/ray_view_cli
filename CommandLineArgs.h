@@ -11,10 +11,6 @@ namespace ray_recv
 {
 // Names
 const char c_szArgNSource[] =   "source";
-const char c_szArgNLevel[] =    "level";
-const char c_szArgNMask[] =     "mask";
-const char c_szArgNRadius0[] =  "r0";
-const char c_szArgNRadius[] =   "radius";
 const char c_szArgNNum[] =		"number";
 const char c_szArgNFirst[] =	"first_ray";
 const char c_szArgNModePlay[] = "mode_play";
@@ -34,18 +30,9 @@ inline bool CheckCommandLineArgs(int ac, char* av[], boost::program_options::var
                 ("help,h",												"show help")
                 ("source,s",	po::value<std::string>()
                                         ->default_value("BnpRay11"),	"set source name; example: --source=BnpRay11")
-                ("level,l",		po::value<int>()
-                                        ->default_value(0),				"set minimum level")
-                ("mask,m",		po::value<unsigned>()
-                                        ->default_value(0),				"set mask to show filtered points (zero = no mask)")
                 ("number,n",	po::value<int>()
                                         ->default_value(c_iRaysNum),	"set number of rays to show (-1 = show all rays)")
-                ("first_ray,f",	po::value<int>()
-                                        ->default_value(c_iRayIdxNegative),   "first ray index to count number of rays (--number)")
-                ("r0,0",		po::value<size_t>()
-                                        ->default_value(0),				"set minimum distance point index to show")
-                ("radius,r",	po::value<size_t>()
-                                        ->default_value(0),				"set number of points - radius distance - to show")
+                ("first_ray,f",	po::value<int>())
                 (c_szArgNModePlay,                                      "set ip_st in play mode")
                 ;
 

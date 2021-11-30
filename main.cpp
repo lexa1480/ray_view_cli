@@ -92,36 +92,23 @@ void PrintPad(WINDOW* pad, int row, vector<NByte> vector)
 class CRaySubscriber : public CStClientSubscriber
 {
 private:
-    size_t			m_iRadiusZero;
-    size_t			m_iRadiusDistance;
     int				m_iNum;
     int             m_iFirstRayIdx;
-    unsigned int	m_uMask;
-    NByte			m_byteLevel;
     BNP_UINT16      m_u16NumberPrev;
     WINDOW* m_pad;
     std::mutex* m_mutex_lock;
 
 public:
     CRaySubscriber( const boost::program_options::variables_map& vm, WINDOW* pad, std::mutex& mutex_lock)
-        :     m_iRadiusZero(0)
-    , m_iRadiusDistance(0)
-    , m_iNum(0)
+        :      m_iNum(0)
     , m_iFirstRayIdx(0)
-    , m_uMask(0)
-    , m_byteLevel(0)
     , m_u16NumberPrev(0)
     , m_pad(pad)
     , m_mutex_lock(&mutex_lock)
 
     {
-        int iLevel = GetArgValue<int>( vm, c_szArgNLevel );
-        m_byteLevel = static_cast<NByte>(iLevel);
-        m_iRadiusZero =         GetArgValueDefault<size_t>( vm, c_szArgNRadius0, 0 );
-        m_iRadiusDistance =         GetArgValueDefault<size_t>( vm, c_szArgNRadius, 0 );
         m_iNum =        GetArgValueDefault<int>( vm, c_szArgNNum, c_iRaysNum );
         m_iFirstRayIdx =	GetArgValueDefault<int>( vm, c_szArgNFirst, c_iRayIdxNegative );
-        m_uMask =       GetArgValueDefault<unsigned int>( vm, c_szArgNMask, 0 ); // zero = no mask
     }
 
     void OnRayIdx( int iRayNum )
@@ -137,11 +124,11 @@ public:
                 m_iNum--;
         }
     }
-    void OnMissedRayCount( std::stringstream& ss, int iRayNum, unsigned uCount )
+    void OnMissedRayCount( std::stringstream& /*ss*/, int /*iRayNum*/, unsigned /*uCount*/ )
     {
                // ss << " #" << std::setfill('0') << std::setw(4) << iRayNum << " - missed: " << uCount << std::endl;
     }
-    void OnMissedRay( std::stringstream& ss, int iRayNum )
+    void OnMissedRay( std::stringstream& /*ss*/, int /*iRayNum*/ )
     {
                 //ss << " #" << std::setfill('0') << std::setw(4) << iRayNum << " - missed;" << std::endl;
     }
